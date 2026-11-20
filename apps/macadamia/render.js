@@ -103,7 +103,7 @@ function coverSection(property, photos, urlFor) {
   const c = property.cover;
   const logo = (category, label) => {
     const photo = photos.find((item) => item.category === category);
-    return `<div class="logo-slot"><span>${label}</span>${photo ? `<img src="${urlFor(photo.blob)}" alt="${esc(label)}">` : `<p class="empty">Default missing</p>`}<label class="file">Replace<input type="file" accept="image/*" data-action="replace-logo" data-category="${category}"></label></div>`;
+    return `<div class="logo-slot"><span>${label}</span>${photo ? `<img src="${urlFor(photo.blob)}" alt="${esc(label)}">` : `<p class="empty">Default missing</p>`}${photoInput(category, { label: "Replace", action: "replace-logo", multiple: false })}</div>`;
   };
   return `<div class="section-head"><div><h2>Cover</h2><p>Client and assessor blocks, and the three cover logos. Replacing a logo keeps it with this property and in the backup.</p></div>
     <button type="button" data-action="close-property">All properties</button></div>
@@ -135,7 +135,7 @@ function coverSection(property, photos, urlFor) {
         ${field("Email", "cover.assessorContact.email", c.assessorContact.email, "email")}
       </div>
     </div>
-    <div class="card"><h3>Cover photo</h3><p class="note">The reference cover carries a property photograph under the title.</p>${uploader("cover-photo")}
+    <div class="card"><h3>Cover photo</h3><p class="note">The reference cover carries a property photograph under the title.</p>${photoInput("cover-photo", { multiple: false })}
       ${photoCards(photos.filter((photo) => photo.category === "cover-photo"), urlFor)}</div>
     <div class="card"><h3>Logos and signature</h3><p class="note">Client logo on the left, assessor logo on the right, and the assessor’s signature under that contact block.</p><div class="logo-row">${logo("logo-client", "Client logo")}${logo("logo-assessor", "Assessor logo")}${logo("signature", "Assessor signature")}</div></div>`;
 }
@@ -164,9 +164,9 @@ function orchardSection(property, photos, urlFor) {
     </div>
     <div class="card">${field("Property details", "profile.establishedNarrative", p.establishedNarrative, "textarea", "Establishment years and how the blocks divide")}</div>
     <div class="card">${field("Soil and landscape", "profile.soilNarrative", p.soilNarrative, "textarea")}
-      <h3>Farm map</h3>${uploader("farm-map")}
+      <h3>Farm map</h3>${photoInput("farm-map")}
       ${photoCards(photos.filter((photo) => photo.category === "farm-map"), urlFor)}
-      <h3>Soil map</h3>${uploader("soil-map")}
+      <h3>Soil map</h3>${photoInput("soil-map")}
       ${photoCards(photos.filter((photo) => photo.category === "soil-map"), urlFor)}
     </div>
     <div class="card">${repeatHeader("Soil types", "add-soil")}
@@ -200,8 +200,16 @@ function orchardSection(property, photos, urlFor) {
     </div>`;
 }
 
-function uploader(category, extra = "") {
-  return `<label class="file">Add photo<input type="file" accept="image/*" capture="environment" data-action="add-photo" data-category="${category}" ${extra}></label>`;
+function photoInput(category, { label = "Add photo", action = "add-photo", testId = "", multiple = true, blockId = "", observationId = "", shot = "" } = {}) {
+  const attrs = [
+    `data-category="${category}"`,
+    blockId ? `data-block-id="${blockId}"` : "",
+    observationId ? `data-observation-id="${observationId}"` : "",
+    shot ? `data-label="${shot}"` : "",
+  ].filter(Boolean).join(" ");
+  const id = testId ? ` data-testid="${testId}"` : "";
+  const many = multiple ? " multiple" : "";
+  return `<label class="file drop" data-drop ${attrs} title="Choose a photo, or drop it here">${label}<input type="file" accept="image/*,.heic,.heif"${many}${id} data-action="${action}" ${attrs}></label>`;
 }
 
 function blocksSection(state, urlFor) {
@@ -233,7 +241,7 @@ function blocksSection(state, urlFor) {
       <p class="note">Cultivar and irrigation infrastructure are rated once for the block. They are not averaged from sites.</p>
       ${scoreButtons(`blocks.${bi}.current.cultivar`, block.current?.cultivar, "Cultivar")}
       ${scoreButtons(`blocks.${bi}.current.irrigation`, block.current?.irrigation, "Irrigation infrastructure")}
-      <h3>Block map</h3>${uploader("block-map", `data-block-id="${block.id}"`)}
+      <h3>Block map</h3>${photoInput("block-map", { blockId: block.id })}
       ${photoCards(maps, urlFor)}
     </div>
     <div class="section-head"><div><h2>Sites in ${esc(block.name || "this block")}</h2></div>
@@ -264,7 +272,7 @@ function blocksSection(state, urlFor) {
       ${field("Restrictive layers", `blocks.${bi}.observations.${oi}.soil.constraints`, observation.soil.constraints, "textarea")}
       ${field("Profile interpretation", `blocks.${bi}.observations.${oi}.soil.interpretation`, observation.soil.interpretation, "textarea")}
       <h3>Profile photographs</h3>
-      <div class="row">${["A", "B1", "B2"].map((label) => `<label class="file">${label}<input type="file" accept="image/*" capture="environment" data-action="add-photo" data-category="profile" data-block-id="${block.id}" data-observation-id="${observation.id}" data-label="${label}"></label>`).join("")}</div>
+      <div class="row">${["A", "B1", "B2"].map((label) => photoInput("profile", { label, blockId: block.id, observationId: observation.id, shot: label, multiple: false })).join("")}</div>
       ${photoCards(profilePhotos, urlFor)}
     </div>
     <div class="card">
@@ -351,7 +359,7 @@ function risksSection(property) {
 function evidenceSection(photos, urlFor) {
   const rows = photos.filter((photo) => photo.category === "evidence");
   return `<div class="section-head"><div><h2>Field photographic evidence</h2><p>Photos are compressed on this device before they are stored or exported.</p></div>
-    <label class="file primary">Add photo<input data-testid="photo-input" type="file" accept="image/*" capture="environment" data-action="add-photo" data-category="evidence"></label></div>
+    ${photoInput("evidence", { testId: "photo-input" })}<p class="note">On a computer, use the file picker or drop photos here. They are compressed on this device before they are stored.</p></div>
     ${photoCards(rows, urlFor)}`;
 }
 

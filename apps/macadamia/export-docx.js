@@ -63,6 +63,9 @@ const coverMargin = { top: 900, right: 850, bottom: 900, left: 850, header: 320,
 const landscapeMargin = { top: 851, right: 902, bottom: 851, left: 902, header: 318, footer: 709 };
 
 let tableNo = 1;
+// Sequential from 1 for the whole report. The yield chart is Figure 1 when the
+// property has no earlier figure (no farm map, soil map, block map, or profile
+// photo). It is only Figure 13 once those Horsley figures precede it.
 let figureNo = 1;
 
 function resetCounters() {
@@ -281,6 +284,18 @@ async function imageParagraph(photo, maxW, maxH) {
       }),
     ],
   });
+}
+
+function fieldPhotographs(photos) {
+  const rank = { "farm-map": 0, "soil-map": 1, "block-map": 2, profile: 3, evidence: 4 };
+  const labelOrder = { A: 0, B1: 1, B2: 2 };
+  return (photos || [])
+    .filter((photo) => rank[photo.category] != null)
+    .slice()
+    .sort((a, b) => (rank[a.category] - rank[b.category])
+      || String(a.blockId || "").localeCompare(String(b.blockId || ""))
+      || ((labelOrder[a.label] ?? 9) - (labelOrder[b.label] ?? 9))
+      || String(a.created || "").localeCompare(String(b.created || "")));
 }
 
 function photosOf(photos, category, extra = {}) {
@@ -701,12 +716,14 @@ export async function buildDocx(property, photos) {
   }
 
   const evidence = [heading("6. Field photographic evidence", 1)];
-  const evidencePhotos = photosOf(photos, "evidence");
-  if (!evidencePhotos.length) evidence.push(body("No field photographs recorded."));
-  for (const photo of evidencePhotos) {
+  const fieldPhotos = fieldPhotographs(photos);
+  if (!fieldPhotos.length) evidence.push(body("No field photographs recorded."));
+  for (const photo of fieldPhotos) {
+    if (photo.label) evidence.push(body(photo.label, { bold: true, align: AlignmentType.CENTER, after: 40 }));
     const para = await imageParagraph(photo, 520, 380);
     if (!para) continue;
-    evidence.push(para, nextFigure(photo.caption || photo.name || "Field photograph"));
+    const where = [photo.label, photo.caption || photo.name || "Field photograph"].filter(Boolean).join(" — ");
+    evidence.push(para, nextFigure(where));
   }
 
   const benchmark = Number(property.opinion?.benchmark);

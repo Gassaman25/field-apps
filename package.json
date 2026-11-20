@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "build": "node scripts/build.mjs",
-    "test": "node --test tests/scoring.test.mjs",
+    "test": "node --test tests/scoring.test.mjs tests/field-photos.test.mjs",
     "verify": "node tests/verify.mjs"
   },
   "devDependencies": {
