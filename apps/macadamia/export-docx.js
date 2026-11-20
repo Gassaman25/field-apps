@@ -40,6 +40,7 @@ import {
   scoreStoredBlock,
   SOURCE_NOTE,
   weightPercentLabel,
+  blockIsAssessed,
   chartRisksForBlock,
   yieldChartExplanation,
   yieldChartRow,
@@ -433,23 +434,24 @@ export async function buildDocx(property, photos) {
 
   const clientLogo = photosOf(photos, "logo-client")[0];
   const assessorLogo = photosOf(photos, "logo-assessor")[0];
-  const extraLogo = photosOf(photos, "logo-extra")[0];
+  const signature = photosOf(photos, "signature")[0];
+  const coverPhoto = photosOf(photos, "cover-photo")[0];
 
   const coverChildren = [
     new Paragraph({
       alignment: AlignmentType.CENTER,
-      spacing: { before: 200, after: 80 },
+      spacing: { before: 80, after: 40 },
       children: [run(`${name} Due Diligence Report`, { size: 48, bold: true, color: FOREST })],
     }),
     new Paragraph({
       alignment: AlignmentType.CENTER,
-      spacing: { after: 240 },
+      spacing: { after: 120 },
       children: [run(year, { size: 32, color: LEAF })],
     }),
   ];
-  if (extraLogo) {
-    const extra = await imageParagraph(extraLogo, 180, 120);
-    if (extra) coverChildren.push(extra);
+  if (coverPhoto) {
+    const photo = await imageParagraph(coverPhoto, 620, 340);
+    if (photo) coverChildren.push(photo);
   }
   const leftBits = [];
   const rightBits = [];
@@ -470,6 +472,10 @@ export async function buildDocx(property, photos) {
   if (assessor.address) rightBits.push(...lines(assessor.address));
   if (assessor.phone) rightBits.push(body(`M: ${assessor.phone}`));
   if (assessor.email) rightBits.push(body(`E: ${assessor.email}`));
+  if (signature) {
+    const signed = await imageParagraph(signature, 200, 70);
+    if (signed) rightBits.push(signed);
+  }
   coverChildren.push(new Table({
     width: { size: 100, type: WidthType.PERCENTAGE },
     borders: { top: none, bottom: none, left: none, right: none, insideHorizontal: none, insideVertical: none },
@@ -619,15 +625,16 @@ export async function buildDocx(property, photos) {
     body("The block condition improvement profiles show the current recorded rating and a management potential rating for each parameter. C, P and the risk marks are written by the assessment, not drawn after export. Potential ratings are management objectives, not guaranteed outcomes."),
     heading("4.1 Block condition improvement profiles", 3),
   ];
-  for (const block of blocks) {
+  for (const block of blocks.filter(blockIsAssessed)) {
     section4.push(heading(block.name || "Block", 3));
     section4.push(body(GRID_LEGEND));
     section4.push(improvementTable(block, risks));
     section4.push(body(GRID_INTERPRETATION, { before: 80 }));
   }
 
-  const currents = scores.map((row) => row.score.current);
-  const potentials = scores.map((row) => row.score.potential);
+  const assessed = scores.filter(({ block }) => blockIsAssessed(block));
+  const currents = assessed.map((row) => row.score.current);
+  const potentials = assessed.map((row) => row.score.potential);
   const minPct = currents.length ? Math.min(...currents) : 0;
   const maxPct = currents.length ? Math.max(...currents) : 0;
   const minPot = potentials.length ? Math.min(...potentials) : 0;
@@ -636,8 +643,8 @@ export async function buildDocx(property, photos) {
     nextTable("Current weighted block condition compared with potential condition following implementation of the recommended management interventions"),
     dataTable(
       ["Block", "Current weighted condition", "Potential condition"],
-      scores.length
-        ? scores.map(({ block, score }) => [block.name || "Block", formatPercent(score.current), formatPercent(score.potential)])
+      assessed.length
+        ? assessed.map(({ block, score }) => [block.name || "Block", formatPercent(score.current), formatPercent(score.potential)])
         : [["—", "—", "—"]],
       [40, 30, 30],
     ),
@@ -652,8 +659,8 @@ export async function buildDocx(property, photos) {
     body(CAPITAL_NOTE),
     dataTable(
       ["Block", "Management potential", "Capital uplift (pp)", "Final conditional potential"],
-      scores.length
-        ? scores.map(({ block, score }) => [block.name || "Block", formatPercent(score.potential), formatPp(score.capital.totalPp), formatPercent(score.finalConditional)])
+      assessed.length
+        ? assessed.map(({ block, score }) => [block.name || "Block", formatPercent(score.potential), formatPp(score.capital.totalPp), formatPercent(score.finalConditional)])
         : [["—", "—", "—", "—"]],
       [28, 24, 24, 24],
     ),
@@ -673,9 +680,9 @@ export async function buildDocx(property, photos) {
     ),
   ];
 
-  const chartRows = (blocks.length ? blocks : [{ name: "Block" }]).map((block, index) => yieldChartRow(
-    block.name || `Block ${index + 1}`,
-    scores[index]?.score || scoreStoredBlock(block, uplifts),
+  const chartRows = assessed.map(({ block, score }) => yieldChartRow(
+    block.name || "Block",
+    score,
     chartRisksForBlock(block, risks, uplifts),
   ));
   const chart = await yieldChartPng(chartRows);

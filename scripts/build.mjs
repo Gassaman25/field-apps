@@ -40,7 +40,7 @@ const assets = [
   "./icons/favicon-32.png",
   "./logos/client.jpg",
   "./logos/assessor.jpg",
-  "./logos/extra.png",
+  "./logos/signature.png",
 ];
 const sw = fs.readFileSync("core/sw.js", "utf8")
   .replaceAll("__CACHE_VERSION__", version)

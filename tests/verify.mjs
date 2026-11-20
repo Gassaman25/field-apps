@@ -5,6 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import jpeg from "jpeg-js";
 import { chromium } from "playwright";
+import { createHorsleyProperty, HORSLEY_PHOTOS } from "./fixtures/horsley-property.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const site = path.join(root, "site");
@@ -62,6 +63,59 @@ function bigJpeg(file) {
   return { width, height, bytes: fs.statSync(file).size };
 }
 
+function imageSize(buf) {
+  if (buf[0] === 0x89 && buf.toString("ascii", 1, 4) === "PNG") {
+    return { width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) };
+  }
+  let offset = 2;
+  while (offset + 8 < buf.length) {
+    if (buf[offset] !== 0xff) break;
+    const marker = buf[offset + 1];
+    const length = buf.readUInt16BE(offset + 2);
+    if (marker === 0xc0 || marker === 0xc2) {
+      return { height: buf.readUInt16BE(offset + 5), width: buf.readUInt16BE(offset + 7) };
+    }
+    offset += 2 + length;
+  }
+  return { width: 800, height: 600 };
+}
+
+function horsleyBackup() {
+  const property = createHorsleyProperty();
+  const media = "/tmp/refdocx/word/media";
+  const photos = HORSLEY_PHOTOS.map(([file, category, blockId, observationId, label, caption], index) => {
+    const buf = fs.readFileSync(path.join(media, file));
+    const size = imageSize(buf);
+    const mime = file.endsWith(".png") ? "image/png" : "image/jpeg";
+    return {
+      id: `horsley-photo-${index}`,
+      propertyId: property.id,
+      category,
+      blockId,
+      observationId,
+      label,
+      caption,
+      name: file,
+      created: "2026-11-03T00:00:00.000Z",
+      width: size.width,
+      height: size.height,
+      bytes: buf.length,
+      originalWidth: size.width,
+      originalHeight: size.height,
+      originalBytes: buf.length,
+      mime,
+      data: buf.toString("base64"),
+      thumb: "",
+    };
+  });
+  return {
+    format: "field-apps-backup",
+    version: 1,
+    exportedAt: "2026-11-09T00:00:00.000Z",
+    properties: [{ property, photos }],
+  };
+}
+
 const server = await serve(site);
 const port = server.address().port;
 const base = `http://127.0.0.1:${port}/`;
@@ -76,6 +130,7 @@ const browser = await chromium.launch({
 });
 const context = await browser.newContext({ acceptDownloads: true, serviceWorkers: "allow" });
 const page = await context.newPage();
+page.setDefaultTimeout(120000);
 const logs = [];
 page.on("console", (msg) => {
   const text = msg.text();
@@ -180,6 +235,60 @@ console.log("restored", JSON.stringify(restored));
 if (restored.name !== "Verification Orchard" || restored.blocks < 2) throw new Error("restore did not bring the property back");
 if (!restored.photos.length || restored.photos[0].width !== 1800) throw new Error(`photo was not compressed: ${JSON.stringify(restored.photos)}`);
 if (!(restored.photos[0].bytes < restored.photos[0].originalBytes)) throw new Error("compressed photo is not smaller");
+const compressionBackupBytes = fs.statSync(backupPath).size;
+console.log("compression backup bytes", compressionBackupBytes);
+
+await page.evaluate(async () => {
+  const names = (await indexedDB.databases()).map((db) => db.name);
+  await Promise.all(names.map((name) => new Promise((resolve) => {
+    const request = indexedDB.deleteDatabase(name);
+    request.onsuccess = request.onerror = request.onblocked = () => resolve();
+  })));
+  localStorage.clear();
+});
+await page.reload();
+await page.getByTestId("new-property").waitFor();
+const horsleyPath = path.join(artifacts, "horsley-backup.json");
+fs.writeFileSync(horsleyPath, JSON.stringify(horsleyBackup()));
+console.log("horsley backup bytes", fs.statSync(horsleyPath).size);
+await page.getByTestId("restore-input").setInputFiles(horsleyPath);
+await page.getByRole("button", { name: "Open" }).waitFor();
+const horsleyCounts = await page.evaluate(async () => {
+  const db = await new Promise((resolve, reject) => {
+    const request = indexedDB.open("field-apps");
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+  const read = (store) => new Promise((resolve, reject) => {
+    const request = db.transaction(store, "readonly").objectStore(store).getAll();
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+  const properties = await read("properties");
+  const photos = await read("photos");
+  db.close();
+  return {
+    properties: properties.length,
+    name: properties[0]?.cover?.propertyName,
+    blocks: properties[0]?.blocks?.length,
+    sites: properties[0]?.blocks?.reduce((sum, block) => sum + block.observations.length, 0),
+    photos: photos.length,
+  };
+});
+console.log("horsley restored", horsleyCounts);
+if (horsleyCounts.properties !== 1 || horsleyCounts.blocks !== 3 || horsleyCounts.photos < 20) {
+  throw new Error(`Horsley restore counts wrong: ${JSON.stringify(horsleyCounts)}`);
+}
+
+await page.setViewportSize({ width: 390, height: 844 });
+await page.screenshot({ path: path.join(artifacts, "ui-phone-property-list.png"), fullPage: true });
+await page.getByRole("button", { name: "Open" }).click();
+await page.locator("text=Storage").waitFor();
+await page.screenshot({ path: path.join(artifacts, "ui-phone-storage.png"), fullPage: false });
+await page.locator('[data-section="blocks"]').click();
+await page.locator("text=Block 1").first().waitFor();
+await page.screenshot({ path: path.join(artifacts, "ui-phone-block-form.png"), fullPage: true });
+await page.setViewportSize({ width: 1280, height: 900 });
 
 const [docxDownload] = await Promise.all([
   page.waitForEvent("download"),
@@ -227,8 +336,12 @@ const footerText = report.footers.map((footer) => footer.text).join(" ");
 if (!footerText.includes("Due Diligence Report") || !footerFields.includes("PAGE") || !footerFields.includes("NUMPAGES")) {
   throw new Error(`footer fields missing: ${footerText} ${footerFields}`);
 }
-if (!report.captions.some((caption) => caption.startsWith("Figure "))) throw new Error("figure captions missing");
-if (report.bytes > 8_000_000) throw new Error(`docx is too large: ${report.bytes}`);
+const allText = report.sections.flatMap((section) => section.text).join("\n");
+if (!allText.includes("Figure 13:")) throw new Error(`figure numbering did not reach 13: ${report.captions.filter((c) => c.startsWith("Figure")).join(" | ")}`);
+if (!allText.includes("51% to 53%") || !allText.includes("81–82%")) throw new Error("Figure 13 explanation is missing the Horsley ranges");
+if (!allText.includes("Phase canopy renewal")) throw new Error("change-needed text missing from the 4.1 grid");
+if (!/\bC\b/.test(allText) || !allText.includes("P")) throw new Error("C or P marks missing from the 4.1 grid");
+if (report.bytes > 15_000_000) throw new Error(`docx is too large: ${report.bytes}`);
 console.log("docx structure ok", report.bytes, "bytes");
 
 const pdfDir = path.join(artifacts, "pdf");
@@ -265,8 +378,11 @@ if (!grid) throw new Error("could not find a 4.1 grid page in the PDF");
 if (grid.width <= grid.height) throw new Error("4.1 grid page is not landscape");
 if (!chartPage) throw new Error("could not find the Figure 13 yield chart page");
 
-function snap(page, name) {
-  execFileSync("pdftoppm", ["-png", "-r", "120", "-f", String(page), "-l", String(page), pdf, path.join(artifacts, name)]);
+function snap(pageNumber, name) {
+  for (const file of fs.readdirSync(artifacts)) {
+    if (file === `${name}.png` || file.startsWith(`${name}-`)) fs.rmSync(path.join(artifacts, file));
+  }
+  execFileSync("pdftoppm", ["-png", "-r", "110", "-f", String(pageNumber), "-l", String(pageNumber), pdf, path.join(artifacts, name)]);
   const generated = fs.readdirSync(artifacts).find((file) => file.startsWith(`${name}-`) && file.endsWith(".png"));
   if (generated) fs.renameSync(path.join(artifacts, generated), path.join(artifacts, `${name}.png`));
 }

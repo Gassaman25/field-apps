@@ -10,10 +10,12 @@ import {
   PARAMETERS,
   scoreBlock,
   shareWeightedMean,
+  blockIsAssessed,
   chartLegendIds,
   chartRisksForBlock,
   yieldChartRow,
 } from "../apps/macadamia/scoring.js";
+import { createHorsleyProperty } from "./fixtures/horsley-property.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const fixture = path.join(root, "tests/fixtures/weighted-block-condition.xlsx");
@@ -131,6 +133,26 @@ test("a risk applies to a block only when the register says so", () => {
   assert.equal(row.total, 100);
   assert.equal(row.segments.reduce((sum, segment) => sum + segment.value, 0), 20);
   assert.deepEqual(row.segments.map((segment) => segment.id), ["R2", "R3"]);
+});
+
+test("Horsley blocks produce the published Figure 13 bars and are not scored as zero", () => {
+  const property = createHorsleyProperty();
+  const lines = property.blocks.filter(blockIsAssessed).map((block) => yieldChartRow(
+    block.name,
+    scoreBlock({
+      sites: block.observations,
+      blockRatings: block.current,
+      potentialRatings: block.potential,
+      uplifts: property.uplifts,
+    }),
+    chartRisksForBlock(block, property.risks, property.uplifts),
+  ).line);
+  assert.deepEqual(lines, [
+    "Block 1: 52 + 30 + 8 + 6 + 4 = 100%",
+    "Block 2: 51 + 30 + 9 + 6 + 4 = 100%",
+    "Block 3: 53 + 28 + 9 + 6 + 4 = 100%",
+  ]);
+  assert.equal(blockIsAssessed({ observations: [{ ratings: {} }], current: {}, potential: {} }), false);
 });
 
 test("the 4.1 grid marks a C range, P, and risks linked to a domain", () => {
