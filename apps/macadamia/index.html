@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#173d2b">
+  <meta name="description" content="Offline macadamia acquisition field report. Capture orchard condition and export a Word due-diligence report.">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Orchard Report">
+  <title>Macadamia Acquisition Field Report</title>
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="icon" href="./icons/favicon-32.png" sizes="32x32" type="image/png">
+  <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="./app.css">
+</head>
+<body>
+  <div id="update" class="update" hidden>
+    <span>An update is available. Reload to use the new version.</span>
+    <button type="button" data-action="reload-update">Reload</button>
+  </div>
+  <header class="top">
+    <div class="eyebrow">Pre-purchase agronomic due diligence</div>
+    <h1>Macadamia Acquisition Field Report</h1>
+    <div id="storage">Checking storage…</div>
+  </header>
+  <main id="app"></main>
+  <div id="toast" hidden></div>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

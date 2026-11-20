@@ -1,0 +1,16 @@
+{
+  "name": "field-apps",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "node --test tests/scoring.test.mjs",
+    "verify": "node tests/verify.mjs"
+  },
+  "devDependencies": {
+    "docx": "^9.16.0",
+    "esbuild": "^0.28.2",
+    "jpeg-js": "^0.4.4",
+    "playwright": "^1.65.1"
+  }
+}
