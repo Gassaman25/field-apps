@@ -7,7 +7,7 @@ import { paintYieldChart } from "./chart.js";
 import { buildDocx } from "./export-docx.js";
 import { blankBlock, blankObservation, blankProperty, blankRisk, uid } from "./model.js";
 import { editorHtml, esc, homeHtml } from "./render.js";
-import { chartRisksForBlock, formatPercent, formatPp, scoreStoredBlock, weightPercentLabel, yieldChartRow } from "./scoring.js";
+import { blockIsAssessed, chartRisksForBlock, formatPercent, formatPp, scoreStoredBlock, weightPercentLabel, yieldChartRow } from "./scoring.js";
 
 const ACTIVE_KEY = "field-apps-active";
 const state = {
@@ -96,7 +96,7 @@ async function seedLogos(propertyId) {
   const files = [
     ["logo-client", "./logos/client.jpg"],
     ["logo-assessor", "./logos/assessor.jpg"],
-    ["logo-extra", "./logos/extra.png"],
+    ["signature", "./logos/signature.png"],
   ];
   for (const [category, href] of files) {
     try {
@@ -149,8 +149,8 @@ function render() {
   app.innerHTML = `<p class="save-line" id="saveState">Saved on this device</p>${editorHtml(state, urlFor)}`;
   const chart = document.querySelector("#yield-chart");
   if (chart) {
-    paintYieldChart(chart, state.property.blocks.map((block, index) => yieldChartRow(
-      block.name || `Block ${index + 1}`,
+    paintYieldChart(chart, state.property.blocks.filter(blockIsAssessed).map((block) => yieldChartRow(
+      block.name || "Block",
       scoreStoredBlock(block, state.property.uplifts),
       chartRisksForBlock(block, state.property.risks, state.property.uplifts),
     )));

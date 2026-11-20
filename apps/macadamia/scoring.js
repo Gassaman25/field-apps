@@ -187,6 +187,12 @@ export function scoreStoredBlock(block, uplifts) {
   });
 }
 
+/** A block with no recorded current rating is unassessed and must not be treated as zero. */
+export function blockIsAssessed(block) {
+  const score = scoreStoredBlock(block, { r1: 0, r2: 0, r3: 0 });
+  return score.parameters.some((param) => param.currentRating != null);
+}
+
 function markColumn(value) {
   const n = positiveRating(value);
   if (n === null) return null;

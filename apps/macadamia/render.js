@@ -135,7 +135,9 @@ function coverSection(property, photos, urlFor) {
         ${field("Email", "cover.assessorContact.email", c.assessorContact.email, "email")}
       </div>
     </div>
-    <div class="card"><h3>Cover logos</h3><div class="logo-row">${logo("logo-client", "Client")}${logo("logo-assessor", "Assessor")}${logo("logo-extra", "Additional mark")}</div></div>`;
+    <div class="card"><h3>Cover photo</h3><p class="note">The reference cover carries a property photograph under the title.</p>${uploader("cover-photo")}
+      ${photoCards(photos.filter((photo) => photo.category === "cover-photo"), urlFor)}</div>
+    <div class="card"><h3>Logos and signature</h3><p class="note">Client logo on the left, assessor logo on the right, and the assessor’s signature under that contact block.</p><div class="logo-row">${logo("logo-client", "Client logo")}${logo("logo-assessor", "Assessor logo")}${logo("signature", "Assessor signature")}</div></div>`;
 }
 
 function executiveSection(property) {
