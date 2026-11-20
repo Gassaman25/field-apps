@@ -23,6 +23,21 @@ const state = {
 };
 
 const app = document.querySelector("#app");
+let photosSaving = 0;
+const photoSaveWaiters = new Set();
+
+function finishPhotoSave(count = 1) {
+  photosSaving = Math.max(0, photosSaving - count);
+  if (photosSaving === 0) {
+    for (const resolve of [...photoSaveWaiters]) resolve();
+    photoSaveWaiters.clear();
+  }
+}
+
+function whenPhotosSaved() {
+  if (photosSaving === 0) return Promise.resolve();
+  return new Promise((resolve) => photoSaveWaiters.add(resolve));
+}
 const storageEl = document.querySelector("#storage");
 const toastEl = document.querySelector("#toast");
 let saveTimer = 0;
@@ -157,7 +172,26 @@ function render() {
   }
 }
 
-async function addPhoto(file, meta) {
+async function addPhotos(files, meta) {
+  const list = [...files].filter(Boolean);
+  if (!list.length || !state.property) return;
+  photosSaving += list.length;
+  try {
+    for (const file of list) {
+      try {
+        await savePhotoFile(file, meta);
+      } catch (error) {
+        console.error(error);
+        const undecodable = error?.name === "InvalidStateError" || /decode|could not be read/i.test(error?.message || "");
+        toast(undecodable ? `${file.name || "This photo"} could not be read. Save it as a JPEG and add it again.` : "The photo could not be saved.");
+      }
+    }
+  } finally {
+    finishPhotoSave(list.length);
+  }
+}
+
+async function savePhotoFile(file, meta) {
   const compressed = meta.category.startsWith("logo-") ? null : await compressPhoto(file);
   const blob = compressed ? compressed.blob : file;
   const thumb = compressed ? compressed.thumb : file;
@@ -367,9 +401,14 @@ async function onClick(event) {
   if (action === "export-docx") {
     const button = target;
     button.disabled = true;
-    button.textContent = "Building Word…";
+    button.textContent = photosSaving ? "Saving photos…" : "Building Word…";
     try {
-      await saveNow();
+      do {
+        await whenPhotosSaved();
+        await saveNow();
+        state.photos = await listPhotos(state.property.id);
+      } while (photosSaving > 0);
+      if (button.isConnected) button.textContent = "Building Word…";
       const blob = await buildDocx(state.property, state.photos);
       const safe = (state.property.cover.propertyName || "macadamia-report").replace(/[^\w.-]+/g, "-");
       download(blob, `${safe}-due-diligence.docx`);
@@ -424,15 +463,10 @@ async function onChange(event) {
     return;
   }
   if (target.dataset.action === "add-photo" || target.dataset.action === "replace-logo") {
-    const file = target.files?.[0];
+    const files = [...(target.files || [])];
     target.value = "";
-    if (!file || !state.property) return;
-    await addPhoto(file, {
-      category: target.dataset.category,
-      blockId: target.dataset.blockId,
-      observationId: target.dataset.observationId,
-      label: target.dataset.label,
-    });
+    if (!files.length || !state.property) return;
+    await addPhotos(files, photoMeta(target));
     return;
   }
   if (target.dataset.action === "toggle-archived") {
@@ -508,9 +542,46 @@ async function duplicate(id) {
   toast("Property duplicated");
 }
 
+function photoMeta(source) {
+  return {
+    category: source.dataset.category,
+    blockId: source.dataset.blockId,
+    observationId: source.dataset.observationId,
+    label: source.dataset.label,
+  };
+}
+
+function draggedFiles(event) {
+  return [...(event.dataTransfer?.types || [])].includes("Files");
+}
+
+function dropZone(event) {
+  const el = event.target instanceof Element ? event.target : event.target?.parentElement;
+  return el?.closest?.("[data-drop]") || null;
+}
+
 app.addEventListener("click", (event) => { onClick(event).catch((error) => console.error(error)); });
 app.addEventListener("input", onInput);
 app.addEventListener("change", (event) => { onChange(event).catch((error) => console.error(error)); });
+document.addEventListener("dragover", (event) => {
+  if (!draggedFiles(event)) return;
+  event.preventDefault();
+  const zone = dropZone(event);
+  document.querySelectorAll(".drop.over").forEach((el) => { if (el !== zone) el.classList.remove("over"); });
+  zone?.classList.add("over");
+});
+document.addEventListener("drop", (event) => {
+  if (!draggedFiles(event)) return;
+  event.preventDefault();
+  document.querySelectorAll(".drop.over").forEach((el) => el.classList.remove("over"));
+  const zone = dropZone(event);
+  const files = [...(event.dataTransfer?.files || [])];
+  if (!zone) {
+    if (files.length) toast("Drop the photo on an Add photo button.");
+    return;
+  }
+  addPhotos(files, photoMeta(zone)).catch((error) => console.error(error));
+});
 
 document.querySelector("#update button")?.addEventListener("click", () => applyUpdate(state.updateRegistration));
 

@@ -58,6 +58,7 @@ textarea { min-height: 84px; resize: vertical; }
 .score-line, .param { margin: 8px 0 12px; }
 .file { display: inline-flex; }
 .file input { display: none; }
+.file.drop.over { outline: 2px dashed var(--leaf); background: #e7f2ea; }
 .check { display: inline-flex; gap: 6px; align-items: center; margin: 4px 8px 4px 0; font-weight: 650; }
 .domains { margin: 8px 0; }
 .metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 8px 0; }
